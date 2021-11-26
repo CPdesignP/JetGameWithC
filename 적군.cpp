@@ -19,7 +19,8 @@ int main()
 	srand(time(NULL));
 
 	int i;
-	while (1)
+	int num = 0;
+	while (num<3)
 	{
 		Clear();
 
@@ -47,7 +48,7 @@ int main()
 				}
 			}
 		}
-		
+		++num;
 	}
 
 	return 0;
