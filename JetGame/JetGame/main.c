@@ -47,9 +47,11 @@ Bullet bullet[20];
 Cloud cloud[7];
 
 static int score = 0;//점수
-char score_s[100];
+char score_s[100];//char
 int MAX = 100;//난이도 조절
 int sign = 0;//시작, 종료 시그널
+int energy = 10;//생명
+char energy_s[10];
 
 //게임함수
 void moveCursor(int, int);
@@ -57,13 +59,16 @@ void printJet();
 void printEnemy();
 void initBullet();
 void printBullet();
-void crashCheck();//충돌 검사
+int gameover(void);
+void crashCheck();
+void crashCheck2();
+void crashCheckCloud();
 void keyboard(char);
 void Render();
 void inGame();
 void printFile(char*, int);
 void main_screen();
-void initObject();//적비행기,나, 점수 초기화
+void initObject();
 void printCloud(int);
 void printrealCloud();
 
@@ -78,17 +83,15 @@ int time = 0;
 
 int main() {
 
-	//system("mode con cols=80 lines=25");
-
-	//SetWindowSize(50, 30);
 	ScreenInit();
 	Render();
 	ScreenRelease();
 }
 
-void Render() {//게임
+void Render() {
 	//한 화면에 나타내야 할것
-	//제트기(사용자), 적 비행기, 총알, 점수확인
+	//제트기(사용자), 적 비행기, 총알, 점수확인 + 구름
+	main_screen();
 	while (1) {
 		initObject();//구조체 초기화
 		inGame();//게임실행
@@ -99,47 +102,93 @@ void Render() {//게임
 void inGame() {
 	time = GetTickCount64();
 	while (1) {
-		/*if (score >= 10) {
+		if (score >= MAX || energy == 0) {
 			sign = gameover();
 			return;
-		}*/
-		//1000점 이상이 되면 끝내기
-
-		if (time + 100 < GetTickCount64()) {//100틱 지나면, 이만큼 시간이 흐르면 코드 진행, 여기서 게임 속도 조절 가능!
+		}
+		if (time + 60 < GetTickCount64()) {//100틱 지나면, 이만큼 시간이 흐르면 코드 진행, 여기서 게임 속도 조절 가능!
 			time = GetTickCount64();//다시 업뎃
 			COORD Coor = { 0, 0 };
 			DWORD dw;
+			FillConsoleOutputCharacter(Screen[ScreenIndex], ' ', 80 * 45, Coor, &dw);//화면 지우기
 
-			FillConsoleOutputCharacter(Screen[ScreenIndex], ' ', 80 * 45, Coor, &dw);
 			if (_kbhit()) {
-				keyboard(_getch());
+				keyboard(_getch());//키보드 입력
 			}
-			printJet();//제트기 출력
-			printBullet();
-			printrealCloud();
-			printEnemy();
-			crashCheck();
+			printJet();//사용자 전투기 출력
+			printBullet();//총알 출력
+			printrealCloud();//구름 출력
+			printEnemy();//적 출력
+			crashCheck();//총알 적 충돌검사
+			crashCheck2();//나 적 충돌검사
 			moveCursor(60, 25);
-			sprintf(score_s, "%d", score);
-			printf_b(score_s);
-			ScreenFlip();
+			setColor(15);
+			printf_b("점수: ");
+			moveCursor(65, 25);
+			sprintf(score_s, "%d", score);//int->string 변환
+			printf_b(score_s);//점수 출력
+			moveCursor(60, 27);
+			printf_b("생명: ");
+			moveCursor(65, 27);
+			sprintf(energy_s, "%d", energy);
+			printf_b(energy_s);
+			ScreenFlip();//화면 버퍼 전환
 		}
-		//적 비행기 출력
-		//printBullet();//쏘기
-		//crashCheck();//충돌검사
-		//moveCursor(45, 20);
-
-		//printf("점수: %d", score);//점수출력
-		//Sleep(1);//게임 속도 조절, 깜박이 임시방편
 	}
 }
+int gameover(void)//게임종료화면
+{
+	COORD Coor = { 0, 0 };
+	DWORD dw;
+	//back buffer의 화면 지우기
+	FillConsoleOutputCharacter(Screen[ScreenIndex], ' ', 80 * 45, Coor, &dw);
+	setColor(14);
+	FILE* file;
+	int c;
+	char line[1000];
+	char* copyline;
+	file = fopen("end_title.txt", "r");
 
+	if (file != NULL) {
+		int i = 5;
+		while (!feof(file)) {
+			moveCursor(30, i);
+			copyline = fgets(line, sizeof(line), file);
+			printf_b(copyline);
+			++i;
+		}
+		fclose(file);
+	}
+	else {
+		//printf("Failed");
+		return -1;
+	}
+	moveCursor(45, 20);
+	printf_b("다시하기:y");
+	moveCursor(45, 23);
+	printf_b("나가기:n");
+	ScreenFlip();//지금 까지 back buffer에 그린것을 front buffer와 전환
+	while (1)
+	{
+		if (_kbhit())
+		{
+			char c = _getch();
+			if (c == 'Y' || c == 'y')
+				return 1;//게임으로
+			else if (c == 'N' || c == 'n')
+				return -1;//종료
+
+		}
+	}
+
+}
 void initObject() {
 	jet.top = 10;
 	score = 0;
-	for (int i = 0; i < 2; i++) {
+	energy = 10;
+	for (int i = 0; i < 1; i++) {
 		cloud[i].x = 110;//램덤한 위치
-		cloud[i].y = 5 * i;//랜덤한 위치
+		cloud[i].y = (rand() % 10 * 3);//랜덤한 위치
 		cloud[i].cActivate = true;//첫화면은 보이게
 	}
 	for (int i = 0; i < 20; i++) {
@@ -154,20 +203,45 @@ void initObject() {
 	}
 }
 void main_screen() {
-	COORD Coor = { 0, 0 };
-	DWORD dw;
-	FillConsoleOutputCharacter(Screen[ScreenIndex], ' ', 80 * 45, Coor, &dw);
-	printFile("main_title.txt", 14);
+	//COORD Coor = { 0, 0 };
+	//DWORD dw;
+	//FillConsoleOutputCharacter(Screen[ScreenIndex], ' ', 80 * 45, Coor, &dw);
+	//printFile("main_title.txt", 1);
+	//moveCursor(0, 0);
+	////printf("시작하려면 아무키나 누르세요");
+	setColor(14);
+	FILE* file;
+	int c;
+	char line[1000];
+	char* copyline;
+	file = fopen("main_title.txt", "r");
+
+	if (file != NULL) {
+		int i = 5;
+		while (!feof(file)) {
+			moveCursor(30, i);
+			copyline = fgets(line, sizeof(line), file);
+			printf_b(copyline);
+			++i;
+		}
+		fclose(file);
+	}
+	else {
+		//printf("Failed");
+		return -1;
+	}
 	moveCursor(40, 20);
-	printf("시작하려면 아무키나 누르세요");
+	printf_b("시작하려면 아무키나 누르세요");
+	ScreenFlip();//다 그리면 front buffer에 오게 버퍼 전환을 해준다.
 	while (1) {
 		if (_kbhit())//입력들어오면 끝
 			return;
 	}
 }
-//JET
 
+//JET
 void printJet() {
+	setColor(11);
 	FILE* file;
 	int c;
 	char line[1000];
@@ -203,6 +277,7 @@ void initBullet() {
 }
 
 void printBullet() {
+	setColor(14);
 	char* bullet_txt = "-->";
 	for (int i = 0; i < 20; i++) {
 		if (bullet[i].bActivate) {
@@ -234,14 +309,24 @@ void crashCheck() {
 		}
 	}
 }
+void crashCheck2() {//나와 적 충돌 검사
+	for (int i = 0; i < 20; i++) {
+		if (stEnemy[i].bActive && (stEnemy[i].x <= jet.start + 7) && ((stEnemy[i].y >= jet.top) && (stEnemy[i].y <= jet.top + 6))) {
+			stEnemy[i].bActive = false;
+			energy -= 1;
+		}
+	}
+
+}
 //ENEMY
 void printEnemy() {
+	setColor(12);
 	for (int i = 0; i < 10; i++)
 	{
 		if (!stEnemy[i].bActive)
 		{
 			stEnemy[i].y = (rand() % 10 * 3);
-			stEnemy[i].x = 80;
+			stEnemy[i].x = 100;
 			stEnemy[i].bActive = true;
 			break;
 		}
@@ -253,7 +338,7 @@ void printEnemy() {
 			moveCursor(stEnemy[i].x, stEnemy[i].y);
 			printf_b("<ㅔ(");
 			stEnemy[i].x--;
-			if (stEnemy[i].x < 10)
+			if (stEnemy[i].x < 3)
 			{
 				stEnemy[i].bActive = false;
 			}
@@ -261,6 +346,7 @@ void printEnemy() {
 	}
 }
 void printCloud(int i) {
+	setColor(15);
 	FILE* file;
 	int c;
 	char line[1000];
@@ -288,27 +374,34 @@ void printrealCloud() {
 		/*if (cloud[i].x = jet.start + 10)
 			continue;*/
 		if (cloud[i].x < 10) {
-			cloud[i].x = 100;//악 귀찬스
-			cloud[i].y = 5;
+			cloud[i].x = 100;
+			cloud[i].y = (rand() % 10 * 2) + 5;
 			continue;
 		}
 		if (cloud[i].cActivate) {
 			printCloud(i);
-			cloud[i].x -= 5;
+			cloud[i].x -= 3;
 		}
 	}
+}
+void crashCheckCloud() {
+	//if((cloud[0].x <= jet.start + 7) && ((cloud[0].y >= jet.top) && (cloud[0].y <= jet.top + 6))|| ((cloud[0].y >= jet.top) && (cloud[0].y <= jet.top + 6))|| ((cloud[0].y >= jet.top) && (cloud[0].y <= jet.top + 6))) {//3가지 경우
+	//	energy = -3;
+	//	cloud[0].x = 100;
+	//	}
+	//}
+
 }
 //SYSTEM
 void printFile(char* filename, int color_num)//커서 위치도 인자로 받기, 움직이면 커서 위치를 갱신해줘야 함으로
 {
 	FILE* file;
-	DWORD dw;
 
-	setColor(color_num);
+	//setColor(color_num);
 	int c;
 	char line[1000];
 	char* copyline;
-	file = fopen(filename, "r");
+	file = fopen("cloud.txt", "r");
 	if (file != NULL) {
 		int i = 4;
 		while (!feof(file)) {
@@ -321,7 +414,10 @@ void printFile(char* filename, int color_num)//커서 위치도 인자로 받기, 움직이면
 		fclose(file);
 	}
 	else {
-		//printf("Failed");
+		while (1) {
+			printf("Failed");
+		}
+
 		return -1;
 	}
 }
@@ -372,7 +468,7 @@ void ScreenInit() // 화면 버퍼 2개 생성
 	cci.bVisible = FALSE;
 
 	SetConsoleCursorInfo(Screen[0], &cci);
-	SetConsoleCursorInfo(Screen[1], &cci);//아마 첫번째 인자가 화면 버퍼를 의미하는 것!
+	SetConsoleCursorInfo(Screen[1], &cci);//첫번째 인자가 화면 버퍼를 의미
 
 }
 void ScreenRelease()//버퍼 메모리 해제
